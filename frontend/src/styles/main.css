@@ -1,0 +1,538 @@
+:root {
+  /* 消防橙红主色 */
+  --fp-brand: #d84315;
+  --fp-brand-soft: #fbe9e4;
+  --fp-brand-deep: #a3310f;
+  --fp-warn: #f9a825;
+  --fp-warn-soft: #fef6e0;
+  --fp-danger: #c62828;
+  --fp-danger-soft: #fdeaea;
+  --fp-info: #607d8b;
+  --fp-ok: #2e7d32;
+  --fp-bg: #fff7f4;
+  --fp-panel: #ffffff;
+  --fp-line: #f0e0da;
+  --fp-text: #2c2320;
+  --fp-text-sub: #7a6b66;
+  --fp-shadow: 0 2px 10px rgba(216, 67, 21, 0.08);
+  --el-color-primary: #d84315;
+  --el-color-primary-light-3: #ef7a52;
+  --el-color-primary-light-5: #f39d7f;
+  --el-color-primary-light-7: #f8c3b1;
+  --el-color-primary-light-8: #fbd6c9;
+  --el-color-primary-light-9: #fdeae3;
+  --el-color-primary-dark-2: #ad3611;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--fp-bg);
+  color: var(--fp-text);
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+}
+
+/* ---------- 外壳 ---------- */
+.fp-shell {
+  min-height: 100vh;
+}
+
+/* ---------- 顶栏 ---------- */
+.fp-topbar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: linear-gradient(90deg, #d84315 0%, #ef6a3a 62%, #f79b6a 100%);
+  color: #fff;
+  box-shadow: var(--fp-shadow);
+}
+
+.fp-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 320px;
+}
+
+.fp-brand-mark {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+}
+
+.fp-brand-title {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.fp-brand-sub {
+  font-size: 12px;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+.fp-top-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fp-top-picker .el-select {
+  width: 260px;
+}
+
+.fp-top-stats {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.fp-stat {
+  min-width: 84px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  text-align: center;
+}
+
+.fp-stat b {
+  display: block;
+  font-size: 18px;
+  line-height: 1.2;
+}
+
+.fp-stat span {
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+.fp-stat.is-alert {
+  background: rgba(198, 40, 40, 0.55);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.fp-stat.is-warn {
+  background: rgba(249, 168, 37, 0.6);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+/* ---------- 模块导航条 ---------- */
+.fp-navbar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 24px;
+  background: var(--fp-panel);
+  border-bottom: 1px solid var(--fp-line);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+
+.fp-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid var(--fp-line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--fp-text-sub);
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.16s ease;
+}
+
+.fp-nav-btn:hover {
+  color: var(--fp-brand);
+  border-color: var(--el-color-primary-light-7);
+}
+
+.fp-nav-btn.is-on {
+  background: var(--fp-brand-soft);
+  border-color: var(--el-color-primary-light-5);
+  color: var(--fp-brand-deep);
+  font-weight: 600;
+}
+
+.fp-nav-ico {
+  font-size: 15px;
+}
+
+.fp-stage {
+  padding: 18px 24px 40px;
+}
+
+/* ---------- 通用面板 ---------- */
+.fp-panel {
+  background: var(--fp-panel);
+  border: 1px solid var(--fp-line);
+  border-radius: 12px;
+  box-shadow: var(--fp-shadow);
+}
+
+.fp-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px dashed var(--fp-line);
+}
+
+.fp-panel-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fp-brand-deep);
+}
+
+.fp-panel-tip {
+  font-size: 12px;
+  color: var(--fp-text-sub);
+}
+
+.fp-panel-body {
+  padding: 14px 16px;
+}
+
+.fp-space {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* ---------- 楼层标签条 ---------- */
+.fp-floor-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 4px 0 12px;
+}
+
+.fp-floor-tab {
+  position: relative;
+  min-width: 78px;
+  padding: 6px 12px 8px;
+  border: 1px solid var(--fp-line);
+  border-radius: 8px;
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+}
+
+.fp-floor-tab.is-on {
+  border-color: var(--fp-brand);
+  background: var(--fp-brand-soft);
+  box-shadow: inset 0 -3px 0 var(--fp-brand);
+}
+
+.fp-floor-code {
+  font-weight: 700;
+  color: var(--fp-text);
+}
+
+.fp-floor-tab.is-on .fp-floor-code {
+  color: var(--fp-brand-deep);
+}
+
+.fp-floor-meta {
+  font-size: 11px;
+  color: var(--fp-text-sub);
+}
+
+.fp-floor-dot {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--fp-danger);
+}
+
+/* ---------- 类型 chips ---------- */
+.fp-chips {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 12px;
+  background: var(--fp-brand-soft);
+  border: 1px dashed var(--el-color-primary-light-7);
+  border-radius: 10px;
+}
+
+.fp-chip :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
+  color: var(--fp-brand-deep);
+}
+
+.fp-chip :deep(.el-checkbox__input.is-checked .el-checkbox__inner) {
+  background-color: var(--fp-brand);
+  border-color: var(--fp-brand);
+}
+
+/* ---------- 平面图 ---------- */
+.fp-plan-wrap {
+  position: relative;
+  background: repeating-linear-gradient(0deg, #fffdfc 0 24px, #fffaf7 24px 25px),
+    repeating-linear-gradient(90deg, #fffdfc 0 24px, #fffaf7 24px 25px);
+  border: 1px solid var(--fp-line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.fp-plan-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.wall-outer {
+  fill: #fffdfb;
+  stroke: #4a3128;
+  stroke-width: 7;
+}
+
+.wall-inner {
+  stroke: #bfa79d;
+  stroke-width: 2;
+  fill: none;
+}
+
+.corridor {
+  fill: #ffe8df;
+  opacity: 0.75;
+}
+
+.room-label {
+  fill: #a1887f;
+  font-size: 15px;
+  letter-spacing: 2px;
+}
+
+.stair {
+  stroke: #8d6e63;
+  stroke-width: 2;
+  fill: none;
+}
+
+.exit-box {
+  fill: #2e7d32;
+}
+
+.exit-text {
+  fill: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.fp-point {
+  cursor: pointer;
+}
+
+.fp-point:hover .pt-shape {
+  stroke-width: 4;
+}
+
+.pt-shape {
+  stroke: #ffffff;
+  stroke-width: 2.5;
+}
+
+.pt-label {
+  fill: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* ---------- 图例 ---------- */
+.fp-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border-top: 1px dashed var(--fp-line);
+  font-size: 12px;
+  color: var(--fp-text-sub);
+}
+
+.fp-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.fp-legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+/* ---------- 许可停用叠加标记（不改变气泡原色，原状态保留） ---------- */
+.pt-permit-ring {
+  fill: none;
+  stroke: #c62828;
+  stroke-width: 2.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+  animation: fp-permit-blink 1.6s ease-in-out infinite;
+}
+
+.pt-permit-badge-bg {
+  fill: #c62828;
+  stroke: #fff;
+  stroke-width: 1.2;
+  pointer-events: none;
+}
+
+.pt-permit-badge-text {
+  fill: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+@keyframes fp-permit-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.fp-legend-ring {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px dashed #c62828;
+  color: #c62828;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* ---------- 维保看板 ---------- */
+.fp-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(280px, 1fr));
+  gap: 14px;
+}
+
+.fp-board-col {
+  background: #fffaf8;
+  border: 1px solid var(--fp-line);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.fp-board-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  color: var(--fp-brand-deep);
+  padding: 4px 6px 10px;
+  border-bottom: 2px solid var(--fp-line);
+  margin-bottom: 10px;
+}
+
+.fp-board-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--fp-text-sub);
+}
+
+.fp-card {
+  background: #fff;
+  border: 1px solid var(--fp-line);
+  border-left: 4px solid var(--fp-brand);
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  box-shadow: 0 1px 6px rgba(120, 60, 40, 0.06);
+}
+
+.fp-card.status-PENDING { border-left-color: var(--fp-warn); }
+.fp-card.status-ASSIGNED { border-left-color: #1976d2; }
+.fp-card.status-WORKING { border-left-color: #0288d1; }
+.fp-card.status-DONE { border-left-color: var(--fp-ok); }
+.fp-card.status-ACCEPTED { border-left-color: #455a64; }
+
+.fp-card-no {
+  font-weight: 700;
+  color: var(--fp-text);
+}
+
+.fp-card-row {
+  display: flex;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--fp-text-sub);
+  margin-top: 4px;
+}
+
+.fp-card-amount {
+  color: var(--fp-brand-deep);
+  font-weight: 700;
+}
+
+.fp-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---------- 倒计时徽章 ---------- */
+.fp-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.fp-badge.ok { background: #eef7ee; color: var(--fp-ok); }
+.fp-badge.warn { background: var(--fp-warn-soft); color: #b26a00; }
+.fp-badge.danger { background: var(--fp-danger-soft); color: var(--fp-danger); font-weight: 700; }
+.fp-badge.muted { background: #eceff1; color: var(--fp-info); }
+
+.fp-row-danger td {
+  background: #fdf1f0 !important;
+}
+
+/* ---------- 抽屉类小表单 ---------- */
+.fp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+.fp-form-grid .el-form-item {
+  margin-bottom: 4px;
+}
+
+@media (max-width: 1280px) {
+  .fp-board {
+    grid-template-columns: repeat(2, minmax(280px, 1fr));
+  }
+
+  .fp-top-stats {
+    width: 100%;
+    justify-content: flex-start;
+  }
+}
