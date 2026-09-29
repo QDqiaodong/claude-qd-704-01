@@ -30,6 +30,15 @@ SET FOREIGN_KEY_CHECKS = 0;
 CREATE DATABASE IF NOT EXISTS fire_protect DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE fire_protect;
 
+DROP TABLE IF EXISTS drill_action_idem;
+DROP TABLE IF EXISTS drill_response;
+DROP TABLE IF EXISTS drill_card_prereq;
+DROP TABLE IF EXISTS drill_event;
+DROP TABLE IF EXISTS drill_card;
+DROP TABLE IF EXISTS drill_position;
+DROP TABLE IF EXISTS drill_script_card;
+DROP TABLE IF EXISTS drill_script;
+DROP TABLE IF EXISTS drill_session;
 DROP TABLE IF EXISTS permit_order_waiver;
 DROP TABLE IF EXISTS reset_verification;
 DROP TABLE IF EXISTS permit_action_log;
@@ -737,6 +746,190 @@ INSERT INTO permit_action_log
     (9, 'RESET_START',  'EFFECTIVE',        'PENDING_RESET',    '周大勇', 'SITE_OWNER',     '发起复位核验（批次 RV-9-01）', '2026-09-15 16:00:00'),
     (9, 'RESET_VERIFY', 'PENDING_RESET',    'PENDING_RESET',    '周大勇', 'SITE_OWNER',     '第 1 轮复位核验：合格 2 / 不合格 0，全部合格，待消防主管关闭许可', '2026-09-16 09:30:00'),
     (9, 'CLOSE',        'PENDING_RESET',    'CLOSED',           '陈默',   'FIRE_MANAGER',   '核验全部合格，关闭许可并解除 2 个点位的许可停用标记', '2026-09-16 10:00:00');
+
+-- ============================================================================
+-- 模块七：消防演练现场指令与响应打点
+--   drill_session       演练场次（草稿→就绪→进行中→暂停→已完成/已取消，开始即冻结指令链）
+--   drill_position      参与岗位（每个岗位独立响应记录）
+--   drill_card          现场指令卡（顺序/目标岗位/响应时限/现场提示/前置节点）
+--   drill_card_prereq   指令卡前置节点（多对多，编排时建链；冻结后随卡快照固定）
+--   drill_event         只追加事件（操作者/服务端时间/前后状态/业务说明），幂等键防重
+--   drill_response      岗位响应尝试（按时确认 / 迟到确认都留痕）
+--   drill_script        常用脚本（脚本后续修改不影响已开始场次）
+--   drill_script_card   脚本指令卡
+--   drill_action_idem   动作幂等：同一 clientActionId 只能成功推进一次状态
+--
+-- 时间口径：剩余秒数永远由服务端时间计算（截止时刻 issued_at+时限，暂停冻结）。
+--   倒计时需要的全部信息（paused_remaining_sec / 各时刻）都落库，
+--   刷新页面 / 服务重启 / 多执行页交替后口径一致；后台扫描器兜底把到期卡翻为超时。
+-- ============================================================================
+
+CREATE TABLE drill_session (
+    id                 BIGINT       NOT NULL AUTO_INCREMENT,
+    drill_no           VARCHAR(24)  NOT NULL COMMENT '演练编号 DR-年-四位序号',
+    title              VARCHAR(128) NOT NULL COMMENT '演练名称',
+    building_id        BIGINT                COMMENT '演练所在建筑',
+    scenario           VARCHAR(255)          COMMENT '演练场景说明（起火部位/天气/假设条件）',
+    organizer_name     VARCHAR(32)  NOT NULL COMMENT '组织者（创建时快照）',
+    status             VARCHAR(16)  NOT NULL COMMENT 'DRAFT 草稿 / READY 就绪 / RUNNING 进行中 / PAUSED 暂停 / COMPLETED 已完成 / CANCELED 已取消',
+    chain_frozen       TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '指令链是否冻结（就绪即冻结，脚本再改不影响本场）',
+    ready_at           DATETIME              COMMENT '置为就绪时间',
+    started_at         DATETIME              COMMENT '开始时间（此刻冻结指令链）',
+    paused_at          DATETIME              COMMENT '最近一次暂停时间',
+    paused_total_sec   BIGINT       NOT NULL DEFAULT 0 COMMENT '累计暂停时长（秒），用于全场时间轴',
+    finished_at        DATETIME              COMMENT '结束时间',
+    finished_by        VARCHAR(32)           COMMENT '结束操作者',
+    canceled_at        DATETIME              COMMENT '取消时间',
+    canceled_by        VARCHAR(32)           COMMENT '取消操作者',
+    cancel_reason      VARCHAR(255)          COMMENT '取消原因',
+    created_at         DATETIME     NOT NULL COMMENT '创建时间',
+    updated_at         DATETIME     NOT NULL COMMENT '更新时间',
+    version            BIGINT       NOT NULL DEFAULT 0 COMMENT '乐观锁：同一版本只允许一个动作成功',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_drill_no (drill_no),
+    KEY idx_drill_status (status),
+    KEY idx_drill_building (building_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '消防演练场次';
+
+CREATE TABLE drill_position (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    drill_id      BIGINT       NOT NULL COMMENT '所属演练场次',
+    pos_code      VARCHAR(32)  NOT NULL COMMENT '岗位代号（如 CMD/EVAC/PUMP）',
+    pos_name      VARCHAR(64)  NOT NULL COMMENT '岗位名称（总指挥/疏散引导组/消防泵房…）',
+    member_name   VARCHAR(32)           COMMENT '岗位人员（确认人），可空',
+    user_id       BIGINT                COMMENT '绑定的系统用户（SITE_OWNER），确认动作据此鉴权',
+    contact       VARCHAR(32)           COMMENT '联系方式',
+    sort_no       INT          NOT NULL DEFAULT 0 COMMENT '展示顺序',
+    created_at    DATETIME     NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_drill_pos_code (drill_id, pos_code),
+    KEY idx_pos_drill (drill_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '演练参与岗位';
+
+CREATE TABLE drill_card (
+    id                   BIGINT       NOT NULL AUTO_INCREMENT,
+    drill_id             BIGINT       NOT NULL COMMENT '所属演练场次',
+    seq_no               INT          NOT NULL COMMENT '顺序号（链上位置，从 1 起）',
+    title                VARCHAR(128) NOT NULL COMMENT '指令标题',
+    target_position_id   BIGINT       NOT NULL COMMENT '目标岗位',
+    time_limit_sec       INT          NOT NULL COMMENT '响应时限（秒）',
+    on_site_hint         VARCHAR(255)          COMMENT '现场提示',
+    status               VARCHAR(16)   NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING 待下达 / WAITING 等待响应 / CONFIRMED 已确认 / TIMEOUT 已超时 / SKIPPED 已跳过',
+    issued_at            DATETIME              COMMENT '下达时间（服务端）',
+    issued_by            VARCHAR(32)           COMMENT '下达人',
+    deadline_at          DATETIME              COMMENT '响应截止时刻=下达时刻+时限（暂停冻结剩余后重算）',
+    confirmed_at         DATETIME              COMMENT '确认时间（服务端）',
+    confirmed_by         VARCHAR(32)           COMMENT '确认人',
+    actual_action        VARCHAR(255)          COMMENT '实际动作（确认必填）',
+    confirm_remark       VARCHAR(255)          COMMENT '确认备注（选填）',
+    late_attempt         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '终态后是否收到过迟到尝试',
+    timed_out_at         DATETIME              COMMENT '判定超时时间',
+    skipped_at           DATETIME              COMMENT '跳过时间',
+    skipped_by           VARCHAR(32)           COMMENT '跳过操作人',
+    skip_reason          VARCHAR(255)          COMMENT '跳过原因（跳过必填）',
+    disposition_note     VARCHAR(255)          COMMENT '处置结论（超时/跳过记录结束前必填）',
+    disposition_at       DATETIME              COMMENT '处置结论登记时间',
+    disposition_by       VARCHAR(32)           COMMENT '处置结论登记人',
+    blocked_by_cascade   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否因前置被跳过而级联阻塞跳过',
+    created_at           DATETIME     NOT NULL,
+    updated_at           DATETIME     NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_drill_card_seq (drill_id, seq_no),
+    KEY idx_card_drill_status (drill_id, status),
+    KEY idx_card_target (target_position_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '现场指令卡';
+
+CREATE TABLE drill_card_prereq (
+    id      BIGINT NOT NULL AUTO_INCREMENT,
+    card_id BIGINT NOT NULL COMMENT '后置指令卡',
+    prereq_card_id BIGINT NOT NULL COMMENT '前置指令卡',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_card_prereq (card_id, prereq_card_id),
+    KEY idx_prereq_card (card_id),
+    KEY idx_prereq_target (prereq_card_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '指令卡前置节点';
+
+CREATE TABLE drill_event (
+    id             BIGINT       NOT NULL AUTO_INCREMENT,
+    drill_id       BIGINT       NOT NULL COMMENT '所属演练场次',
+    event_type     VARCHAR(24)  NOT NULL COMMENT 'CREATE/READY/START/ISSUE/CONFIRM/TIMEOUT/PAUSE/RESUME/SKIP/CANCEL/FINISH/DISPOSE/LATE_ATTEMPT',
+    target_type    VARCHAR(16)           COMMENT '作用对象：SESSION 场次 / CARD 指令卡',
+    target_id      BIGINT                COMMENT '作用对象 id（场次级为空）',
+    from_status    VARCHAR(16)           COMMENT '动作前状态（场次或卡）',
+    to_status      VARCHAR(16)           COMMENT '动作后状态',
+    operator       VARCHAR(32)  NOT NULL COMMENT '操作者',
+    operator_role  VARCHAR(24)  NOT NULL COMMENT '操作者角色',
+    note           VARCHAR(500)          COMMENT '业务说明',
+    created_at     DATETIME     NOT NULL COMMENT '服务端动作时间（id 顺序即时间顺序）',
+    PRIMARY KEY (id),
+    KEY idx_event_drill (drill_id, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '演练事件流（只追加）';
+
+CREATE TABLE drill_response (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    drill_id      BIGINT       NOT NULL COMMENT '所属演练场次',
+    card_id       BIGINT       NOT NULL COMMENT '对应指令卡',
+    position_id   BIGINT       NOT NULL COMMENT '响应岗位',
+    attempt_kind  VARCHAR(16)  NOT NULL COMMENT 'ON_TIME 按时确认 / LATE 迟到尝试',
+    actual_action VARCHAR(255) NOT NULL COMMENT '实际动作',
+    remark        VARCHAR(255)          COMMENT '备注',
+    responder     VARCHAR(32)  NOT NULL COMMENT '响应人',
+    created_at    DATETIME     NOT NULL COMMENT '服务端接收时间',
+    PRIMARY KEY (id),
+    KEY idx_response_card (card_id, id),
+    KEY idx_response_drill (drill_id, id),
+    KEY idx_response_position (position_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '岗位响应尝试记录';
+
+-- 动作幂等：唯一约束保证同一动作标识最多成功一次（事务提交后才可见）
+CREATE TABLE drill_action_idem (
+    id               BIGINT      NOT NULL AUTO_INCREMENT,
+    drill_id         BIGINT      NOT NULL,
+    client_action_id VARCHAR(64) NOT NULL COMMENT '客户端动作标识（UUID）',
+    action           VARCHAR(24) NOT NULL,
+    created_at       DATETIME    NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_drill_client_action (drill_id, client_action_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '演练动作幂等键';
+
+CREATE TABLE drill_script (
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    name         VARCHAR(128) NOT NULL COMMENT '脚本名称',
+    scenario     VARCHAR(255)          COMMENT '适用场景',
+    created_by   VARCHAR(32)  NOT NULL,
+    created_at   DATETIME     NOT NULL,
+    updated_at   DATETIME     NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_script_name (name)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '演练常用脚本';
+
+CREATE TABLE drill_script_card (
+    id             BIGINT       NOT NULL AUTO_INCREMENT,
+    script_id      BIGINT       NOT NULL,
+    seq_no         INT          NOT NULL,
+    title          VARCHAR(128) NOT NULL,
+    target_pos_code VARCHAR(32) NOT NULL COMMENT '目标岗位代号（应用到场次时按代号映射岗位）',
+    time_limit_sec INT          NOT NULL,
+    on_site_hint   VARCHAR(255),
+    prereq_seqs    VARCHAR(64)           COMMENT '前置卡顺序号，逗号分隔（如 1,2）',
+    PRIMARY KEY (id),
+    KEY idx_script_card (script_id, seq_no)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '脚本指令卡';
+
+-- ----------------------------------------------------------------------------
+-- 演示脚本：标准灭火疏散演练（4 岗位 / 6 张卡，含并行与前置依赖）
+-- ----------------------------------------------------------------------------
+INSERT INTO drill_script (id, name, scenario, created_by, created_at, updated_at) VALUES
+    (1, '标准灭火疏散演练脚本', '商业建筑首层中庭模拟起火，按「报警确认→初期处置→广播疏散→分区引导→泵房启泵→清点上报」推进',
+     '陈默', '2026-09-26 10:00:00', '2026-09-26 10:00:00');
+
+INSERT INTO drill_script_card (id, script_id, seq_no, title, target_pos_code, time_limit_sec, on_site_hint, prereq_seqs) VALUES
+    (1, 1, 1, '确认火情并向总指挥报告', 'CMD',  60,  '首层中庭烟感动作，值班员持对讲到现场确认后回报', NULL),
+    (2, 1, 2, '现场初期灭火（就近灭火器）', 'FIRE', 90, '确认火势初期阶段，取用中庭西侧 MFZ/ABC4 干粉灭火器', '1'),
+    (3, 1, 3, '启动应急广播并拨打 119', 'CMD', 60, '模拟拨打 119，说明地址/起火部位/有无被困人员', '1'),
+    (4, 1, 4, '组织人员按疏散指示撤离', 'EVAC', 120, '引导顾客经东、西两个安全出口疏散至集合点', '3'),
+    (5, 1, 5, '消防泵房启动喷淋主泵', 'PUMP', 90, '地下二层泵房就地启动喷淋主泵并回报压力', '2'),
+    (6, 1, 6, '集合点清点人数并上报', 'EVAC', 90, '按区域清点，确认无人员遗漏后向总指挥报告', '4,5');
 
 SET FOREIGN_KEY_CHECKS = 1;
 

@@ -107,3 +107,36 @@ export const extinguisherApi = {
   hydro: (id) => http.post(`/extinguishers/${id}/hydro`),
   scrap: (id) => http.post(`/extinguishers/${id}/scrap`)
 }
+
+/** 模块七：消防演练现场指令与响应打点 */
+export const drillApi = {
+  list: (status) => http.get('/drills', { params: { status } }),
+  detail: (id) => http.get(`/drills/${id}`),
+  clock: (id) => http.get(`/drills/${id}/clock`),
+  create: (data) => http.post('/drills', data),
+  saveDraft: (id, data) => http.post(`/drills/${id}/draft`, data),
+  applyScript: (id, data) => http.post(`/drills/${id}/apply-script`, data),
+  ready: (id, data) => http.post(`/drills/${id}/ready`, data || {}),
+  start: (id, data) => http.post(`/drills/${id}/start`, data || {}),
+  pause: (id, data) => http.post(`/drills/${id}/pause`, data || {}),
+  resume: (id, data) => http.post(`/drills/${id}/resume`, data || {}),
+  cancel: (id, data) => http.post(`/drills/${id}/cancel`, data),
+  finish: (id, data) => http.post(`/drills/${id}/finish`, data),
+  issueCard: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/issue`, data || {}),
+  confirmCard: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/confirm`, data),
+  skipCard: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/skip`, data),
+  disposition: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/disposition`, data),
+  scripts: () => http.get('/drills/scripts'),
+  scriptDetail: (sid) => http.get(`/drills/scripts/${sid}`),
+  saveScript: (data) => http.post('/drills/scripts', data),
+  updateScript: (sid, data) => http.post(`/drills/scripts/${sid}`, data),
+  deleteScript: (sid) => http.delete(`/drills/scripts/${sid}`)
+}
+
+/** 生成动作幂等标识（同一按钮/同一意图只发一次） */
+export function newActionId() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID()
+  }
+  return `a-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+}

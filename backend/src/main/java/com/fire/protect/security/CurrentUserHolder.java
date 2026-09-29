@@ -18,6 +18,11 @@ public final class CurrentUserHolder {
         CURRENT.set(user);
     }
 
+    /** 可空取当前用户（查询视图用于判断「是否本岗位」，不触发 403）。 */
+    public static SysUser get() {
+        return CURRENT.get();
+    }
+
     public static void clear() {
         CURRENT.remove();
     }
