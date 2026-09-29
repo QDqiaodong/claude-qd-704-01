@@ -11,7 +11,8 @@ export const navItems = [
   { key: 'buildings', path: '/buildings', icon: '🏢', label: '建筑与楼层', hint: '建筑类型·层数·面积·消防负责人' },
   { key: 'inspections', path: '/inspections', icon: '🧯', label: '巡检记录', hint: '日巡/月检/季检/年检 + 异常明细行' },
   { key: 'maintenance', path: '/maintenance', icon: '🔧', label: '维保看板', hint: '待派工 → 处理中 → 已完成 三列卡片' },
-  { key: 'extinguishers', path: '/extinguishers', icon: '⏳', label: '灭火器气瓶台账', hint: '水压/报废倒计时 + 报废操作' }
+  { key: 'extinguishers', path: '/extinguishers', icon: '⏳', label: '灭火器气瓶台账', hint: '水压/报废倒计时 + 报废操作' },
+  { key: 'drills', path: '/drills', icon: '🚩', label: '消防演练打点', hint: '演练场次 / 指令链编排 / 执行打点 / 暂停恢复 / 超时迟到 / 事件时间线' }
 ]
 
 const routes = [
@@ -23,6 +24,9 @@ const routes = [
   { path: '/inspections', name: 'inspections', component: () => import('../views/InspectionView.vue') },
   { path: '/maintenance', name: 'maintenance', component: () => import('../views/MaintenanceView.vue') },
   { path: '/extinguishers', name: 'extinguishers', component: () => import('../views/ExtinguisherView.vue') },
+  { path: '/drills', name: 'drills', component: () => import('../views/drill/DrillListView.vue') },
+  { path: '/drills/:id/edit', name: 'drill-edit', component: () => import('../views/drill/DrillEditView.vue') },
+  { path: '/drills/:id/run', name: 'drill-run', component: () => import('../views/drill/DrillRunView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/plan' }
 ]
 

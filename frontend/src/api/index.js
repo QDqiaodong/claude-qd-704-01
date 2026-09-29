@@ -107,3 +107,34 @@ export const extinguisherApi = {
   hydro: (id) => http.post(`/extinguishers/${id}/hydro`),
   scrap: (id) => http.post(`/extinguishers/${id}/scrap`)
 }
+
+/** 模块七：消防演练现场指令与响应打点 */
+export const drillApi = {
+  list: (status) => http.get('/drills', { params: { status } }),
+  detail: (id) => http.get(`/drills/${id}`),
+  create: (data) => http.post('/drills', data || {}),
+  saveDraft: (id, data) => http.post(`/drills/${id}/draft`, data),
+  ready: (id, data) => http.post(`/drills/${id}/ready`, data),
+  reopen: (id, data) => http.post(`/drills/${id}/reopen`, data),
+  start: (id, data) => http.post(`/drills/${id}/start`, data),
+  pause: (id, data) => http.post(`/drills/${id}/pause`, data),
+  resume: (id, data) => http.post(`/drills/${id}/resume`, data),
+  cancel: (id, data) => http.post(`/drills/${id}/cancel`, data),
+  finish: (id, data) => http.post(`/drills/${id}/finish`, data),
+  issue: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/issue`, data),
+  confirm: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/confirm`, data),
+  skip: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/skip`, data),
+  dispose: (id, cardId, data) => http.post(`/drills/${id}/cards/${cardId}/dispose`, data),
+  templateList: () => http.get('/drills/templates'),
+  templateDetail: (templateId) => http.get(`/drills/templates/${templateId}`),
+  saveTemplate: (data) => http.post('/drills/templates', data),
+  deleteTemplate: (templateId) => http.post(`/drills/templates/${templateId}/delete`)
+}
+
+/** 生成客户端动作标识（幂等键）：同一逻辑动作的重发必须复用同一个值 */
+export function newActionKey() {
+  if (window.crypto && typeof window.crypto.randomUUID === 'function') {
+    return window.crypto.randomUUID()
+  }
+  return 'a-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10)
+}

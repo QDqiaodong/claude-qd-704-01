@@ -536,3 +536,291 @@ body {
     justify-content: flex-start;
   }
 }
+
+/* ============================================================================
+   模块七：消防演练现场指令与响应打点
+   ============================================================================ */
+.fp-drill-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(320px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.fp-drill-col {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.fp-run-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: linear-gradient(90deg, #fff 0%, var(--fp-brand-soft) 100%);
+  border: 1px solid var(--fp-line);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+
+.fp-run-title {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.fp-run-no {
+  font-size: 12px;
+  color: var(--fp-text-sub);
+  margin-top: 2px;
+}
+
+.fp-run-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fp-node-card {
+  border: 1px solid var(--fp-line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  position: relative;
+}
+
+.fp-node-card.is-current {
+  border-color: var(--fp-warn);
+  box-shadow: 0 0 0 2px var(--fp-warn-soft);
+}
+
+.fp-node-card.is-next {
+  border-color: var(--fp-brand);
+  box-shadow: 0 0 0 2px var(--fp-brand-soft);
+}
+
+.fp-node-card.is-blocked {
+  background: #faf6f5;
+  border-style: dashed;
+}
+
+.fp-node-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.fp-node-seq {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--fp-brand-soft);
+  color: var(--fp-brand-deep);
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+}
+
+.fp-node-title {
+  font-weight: 700;
+  font-size: 15px;
+}
+
+.fp-node-body {
+  margin-top: 8px;
+  color: var(--fp-text);
+  line-height: 1.6;
+}
+
+.fp-node-hint {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: var(--fp-warn-soft);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: #8a5a00;
+}
+
+.fp-node-meta {
+  margin-top: 8px;
+  font-size: 12.5px;
+  color: var(--fp-text-sub);
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.fp-countdown {
+  font-size: 22px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.fp-countdown.is-urgent {
+  color: var(--fp-danger);
+}
+
+.fp-countdown.is-frozen {
+  color: var(--fp-info);
+}
+
+.fp-blocker-list {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--fp-danger-soft);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--fp-danger);
+}
+
+.fp-blocker-list b {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.fp-post-card {
+  border: 1px solid var(--fp-line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+}
+
+.fp-post-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-weight: 700;
+}
+
+.fp-post-stats {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.fp-post-stat {
+  font-size: 12px;
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: #f4f0ee;
+  color: var(--fp-text-sub);
+}
+
+.fp-post-stat b {
+  color: var(--fp-text);
+}
+
+.fp-timeline {
+  max-height: 720px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.fp-tl-item {
+  display: flex;
+  gap: 10px;
+  padding-bottom: 12px;
+  position: relative;
+}
+
+.fp-tl-item::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 18px;
+  bottom: 0;
+  width: 2px;
+  background: var(--fp-line);
+}
+
+.fp-tl-item:last-child::before {
+  display: none;
+}
+
+.fp-tl-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  margin-top: 3px;
+  flex: 0 0 16px;
+  background: var(--fp-brand);
+  border: 3px solid var(--fp-brand-soft);
+  z-index: 1;
+}
+
+.fp-tl-dot.is-warn { background: var(--fp-warn); border-color: var(--fp-warn-soft); }
+.fp-tl-dot.is-danger { background: var(--fp-danger); border-color: var(--fp-danger-soft); }
+.fp-tl-dot.is-ok { background: var(--fp-ok); border-color: #e3f0e4; }
+.fp-tl-dot.is-info { background: var(--fp-info); border-color: #e6ecee; }
+
+.fp-tl-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.fp-tl-title {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.fp-tl-note {
+  font-size: 12.5px;
+  color: var(--fp-text-sub);
+  margin-top: 2px;
+  line-height: 1.55;
+  word-break: break-all;
+}
+
+.fp-tl-time {
+  font-size: 11.5px;
+  color: #9e8f89;
+  margin-top: 2px;
+}
+
+.fp-tl-state {
+  font-size: 11.5px;
+  color: var(--fp-info);
+  margin-top: 1px;
+}
+
+.fp-edit-card {
+  border: 1px solid var(--fp-line);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+
+.fp-edit-card-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.fp-finish-tip {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--fp-danger-soft);
+  color: var(--fp-danger);
+  font-size: 13px;
+}
+
+.fp-finish-tip ul {
+  margin: 6px 0 0 18px;
+  padding: 0;
+}
+
+.fp-freeze-tag {
+  font-size: 12px;
+  color: var(--fp-info);
+}

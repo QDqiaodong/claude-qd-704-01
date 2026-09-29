@@ -738,10 +738,216 @@ INSERT INTO permit_action_log
     (9, 'RESET_VERIFY', 'PENDING_RESET',    'PENDING_RESET',    '周大勇', 'SITE_OWNER',     '第 1 轮复位核验：合格 2 / 不合格 0，全部合格，待消防主管关闭许可', '2026-09-16 09:30:00'),
     (9, 'CLOSE',        'PENDING_RESET',    'CLOSED',           '陈默',   'FIRE_MANAGER',   '核验全部合格，关闭许可并解除 2 个点位的许可停用标记', '2026-09-16 10:00:00');
 
+-- ============================================================================
+-- 模块七：消防演练现场指令与响应打点
+--   drill_session            演练场次（草稿/就绪/进行中/暂停/已完成/已取消）
+--   drill_post               参与岗位（每个岗位有独立的岗位响应记录）
+--   drill_card               现场指令卡（待下达/等待响应/已确认/已超时/已跳过）
+--   drill_card_dependency    指令卡前置节点（多对多，开始后冻结）
+--   drill_response_attempt   岗位响应尝试（确认落账 + 迟到尝试，全部保留）
+--   drill_event              只追加事件记录（操作者/服务端时间/前后状态/业务说明）
+--   drill_template*          常用演练脚本（场次开始后再改脚本不影响已冻结场次）
+--
+-- 计时口径：deadline 与 remaining_frozen_seconds 全部落在库里，剩余秒数由服务端
+-- 当前时间计算；暂停冻结剩余，恢复从剩余值继续。重启 / 刷新 / 多页面交替一致。
+--
+-- drill_event.uk_event_action_key：同一客户端动作标识在同一场次内只能产生一条
+-- 事件（TIMEOUT 为服务端扫描产生，action_key 为 NULL），重复打点不重复推进状态。
+-- ============================================================================
+
+DROP TABLE IF EXISTS drill_template_post;
+DROP TABLE IF EXISTS drill_template_card;
+DROP TABLE IF EXISTS drill_template;
+DROP TABLE IF EXISTS drill_event;
+DROP TABLE IF EXISTS drill_response_attempt;
+DROP TABLE IF EXISTS drill_card_dependency;
+DROP TABLE IF EXISTS drill_card;
+DROP TABLE IF EXISTS drill_post;
+DROP TABLE IF EXISTS drill_session;
+
+CREATE TABLE drill_session (
+    id             BIGINT       NOT NULL AUTO_INCREMENT,
+    drill_no       VARCHAR(24)  NOT NULL COMMENT '演练编号 DR-年-四位序号',
+    title          VARCHAR(128) NOT NULL COMMENT '演练名称',
+    building_id    BIGINT                COMMENT '关联建筑（可空）',
+    scenario       VARCHAR(500)          COMMENT '演练场景说明',
+    organizer      VARCHAR(32)  NOT NULL COMMENT '演练组织者',
+    status         VARCHAR(16)  NOT NULL COMMENT 'DRAFT 草稿 / READY 就绪 / RUNNING 进行中 / PAUSED 暂停 / FINISHED 已完成 / CANCELED 已取消',
+    ready_at       DATETIME              COMMENT '就绪时间',
+    started_at     DATETIME              COMMENT '开始时间（此刻冻结指令链快照）',
+    paused_at      DATETIME              COMMENT '最近一次暂停时间',
+    finished_at    DATETIME              COMMENT '结束时间',
+    finished_by    VARCHAR(32)           COMMENT '结束操作人',
+    canceled_at    DATETIME              COMMENT '取消时间',
+    canceled_by    VARCHAR(32)           COMMENT '取消操作人',
+    cancel_reason  VARCHAR(255)          COMMENT '取消原因',
+    created_at     DATETIME     NOT NULL COMMENT '创建时间',
+    updated_at     DATETIME     NOT NULL COMMENT '更新时间',
+    version        BIGINT       NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_drill_no (drill_no),
+    KEY idx_drill_status (status)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '消防演练场次';
+
+CREATE TABLE drill_post (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    session_id    BIGINT       NOT NULL COMMENT '所属演练场次',
+    post_code     VARCHAR(32)  NOT NULL COMMENT '岗位编码（本场内唯一，指令卡按编码引用）',
+    post_name     VARCHAR(64)  NOT NULL COMMENT '岗位名称（如 消控室值班岗）',
+    assignee      VARCHAR(32)           COMMENT '岗位人员姓名',
+    contact       VARCHAR(32)           COMMENT '联系方式',
+    sort_no       INT          NOT NULL DEFAULT 0 COMMENT '排序号',
+    created_at    DATETIME     NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_post_session_code (session_id, post_code),
+    KEY idx_post_session (session_id, sort_no)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '演练参与岗位';
+
+CREATE TABLE drill_card (
+    id                     BIGINT       NOT NULL AUTO_INCREMENT,
+    session_id             BIGINT       NOT NULL COMMENT '所属演练场次',
+    seq_no                 INT          NOT NULL COMMENT '顺序号',
+    title                  VARCHAR(128) NOT NULL COMMENT '指令标题',
+    content                VARCHAR(500) NOT NULL COMMENT '指令内容',
+    scene_hint             VARCHAR(500)          COMMENT '现场提示',
+    target_post_id         BIGINT                COMMENT '目标岗位（草稿期引用岗位行；开始时快照姓名/编码）',
+    target_post_code       VARCHAR(32)           COMMENT '目标岗位编码快照',
+    target_post_name       VARCHAR(64)           COMMENT '目标岗位名称快照',
+    time_limit_seconds     INT          NOT NULL DEFAULT 60 COMMENT '响应时限（秒）',
+    status                 VARCHAR(16)  NOT NULL DEFAULT 'PENDING' COMMENT 'PENDING 待下达 / WAITING 等待响应 / CONFIRMED 已确认 / TIMEOUT 已超时 / SKIPPED 已跳过',
+    issued_at              DATETIME              COMMENT '下达时间',
+    issued_by              VARCHAR(32)           COMMENT '下达人',
+    deadline               DATETIME              COMMENT '响应截止时间（下达时刻 + 时限；暂停期间冻结不推进）',
+    remaining_frozen_seconds INT                COMMENT '暂停时冻结的剩余秒数（NULL=未暂停/不在等待）',
+    confirmed_at           DATETIME              COMMENT '确认时间',
+    confirmed_by           VARCHAR(32)           COMMENT '确认人（岗位人员）',
+    actual_action          VARCHAR(500)          COMMENT '实际动作（确认必填）',
+    confirm_remark         VARCHAR(500)          COMMENT '确认备注（可选）',
+    timed_out_at           DATETIME              COMMENT '判定超时的服务端时间',
+    skipped_at             DATETIME              COMMENT '跳过时间',
+    skipped_by             VARCHAR(32)           COMMENT '跳过操作人',
+    skip_reason            VARCHAR(500)          COMMENT '跳过原因（跳过必填）',
+    disposition            VARCHAR(500)          COMMENT '处置结论（超时/跳过记录结束前必填）',
+    disposition_at         DATETIME              COMMENT '处置结论填写时间',
+    disposition_by         VARCHAR(32)           COMMENT '处置结论填写人',
+    created_at             DATETIME     NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (id),
+    KEY idx_card_session (session_id, seq_no),
+    KEY idx_card_status (status)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '现场指令卡';
+
+CREATE TABLE drill_card_dependency (
+    id           BIGINT NOT NULL AUTO_INCREMENT,
+    session_id   BIGINT NOT NULL COMMENT '所属演练场次（冗余，便于冻结后整链查询）',
+    card_id      BIGINT NOT NULL COMMENT '指令卡',
+    prereq_id    BIGINT NOT NULL COMMENT '前置指令卡',
+    created_at   DATETIME NOT NULL COMMENT '创建时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_dep_card_prereq (card_id, prereq_id),
+    KEY idx_dep_card (card_id),
+    KEY idx_dep_prereq (prereq_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '指令卡前置节点';
+
+CREATE TABLE drill_response_attempt (
+    id            BIGINT       NOT NULL AUTO_INCREMENT,
+    session_id    BIGINT       NOT NULL COMMENT '所属演练场次',
+    card_id       BIGINT       NOT NULL COMMENT '对应指令卡',
+    post_id       BIGINT       NOT NULL COMMENT '响应岗位',
+    result        VARCHAR(16)  NOT NULL COMMENT 'CONFIRMED 按时确认 / LATE 迟到尝试（卡已超时或已跳过后到达）',
+    actual_action VARCHAR(500) NOT NULL COMMENT '实际动作',
+    remark        VARCHAR(500)          COMMENT '备注',
+    operator      VARCHAR(32)  NOT NULL COMMENT '提交人',
+    created_at    DATETIME     NOT NULL COMMENT '服务端接收时间',
+    PRIMARY KEY (id),
+    KEY idx_attempt_session (session_id, id),
+    KEY idx_attempt_card (card_id, id),
+    KEY idx_attempt_post (post_id, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '岗位响应尝试（含迟到尝试，只追加）';
+
+CREATE TABLE drill_event (
+    id           BIGINT       NOT NULL AUTO_INCREMENT,
+    session_id   BIGINT       NOT NULL COMMENT '所属演练场次',
+    action       VARCHAR(24)  NOT NULL COMMENT 'CREATE/READY/START/ISSUE/CONFIRM/LATE_CONFIRM/TIMEOUT/PAUSE/RESUME/SKIP/DISPOSE/CANCEL/FINISH',
+    target_type  VARCHAR(16)           COMMENT '作用对象类型：SESSION / CARD（场次级动作为 NULL）',
+    target_id    BIGINT                COMMENT '作用对象 id（指令卡动作记录 card id）',
+    action_key   VARCHAR(64)           COMMENT '客户端动作标识（幂等键；服务端 TIMEOUT 为 NULL）',
+    from_status  VARCHAR(16)           COMMENT '动作前状态',
+    to_status    VARCHAR(16)           COMMENT '动作后状态',
+    operator     VARCHAR(32)  NOT NULL COMMENT '操作者（系统超时记为「系统」）',
+    note         VARCHAR(1000)         COMMENT '业务说明',
+    created_at   DATETIME     NOT NULL COMMENT '服务端动作时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_event_action_key (session_id, action_key),
+    KEY idx_event_session (session_id, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '演练事件记录（只追加）';
+
+CREATE TABLE drill_template (
+    id          BIGINT       NOT NULL AUTO_INCREMENT,
+    name        VARCHAR(128) NOT NULL COMMENT '脚本名称',
+    description VARCHAR(500)          COMMENT '脚本说明',
+    created_by  VARCHAR(32)  NOT NULL COMMENT '创建人',
+    created_at  DATETIME     NOT NULL COMMENT '创建时间',
+    updated_at  DATETIME     NOT NULL COMMENT '更新时间',
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_template_name (name)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '常用演练脚本';
+
+CREATE TABLE drill_template_post (
+    id           BIGINT      NOT NULL AUTO_INCREMENT,
+    template_id  BIGINT      NOT NULL COMMENT '所属脚本',
+    post_code    VARCHAR(32) NOT NULL COMMENT '岗位编码',
+    post_name    VARCHAR(64) NOT NULL COMMENT '岗位名称',
+    sort_no      INT         NOT NULL DEFAULT 0 COMMENT '排序号',
+    PRIMARY KEY (id),
+    KEY idx_tpost_template (template_id, sort_no)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '脚本岗位';
+
+CREATE TABLE drill_template_card (
+    id                 BIGINT       NOT NULL AUTO_INCREMENT,
+    template_id        BIGINT       NOT NULL COMMENT '所属脚本',
+    seq_no             INT          NOT NULL COMMENT '顺序号',
+    title              VARCHAR(128) NOT NULL COMMENT '指令标题',
+    content            VARCHAR(500) NOT NULL COMMENT '指令内容',
+    scene_hint         VARCHAR(500)          COMMENT '现场提示',
+    target_post_code   VARCHAR(32)           COMMENT '目标岗位编码（按编码对应到场次岗位）',
+    time_limit_seconds INT          NOT NULL DEFAULT 60 COMMENT '响应时限（秒）',
+    prereq_seqs        VARCHAR(128)          COMMENT '前置节点顺序号，逗号分隔（如 1,2）',
+    PRIMARY KEY (id),
+    KEY idx_tcard_template (template_id, seq_no)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_unicode_ci COMMENT '脚本指令卡';
+
+-- ----------------------------------------------------------------------------
+-- 常用脚本演示数据：商业综合体火灾疏散标准演练（4 岗 6 卡，含前置链）
+-- ----------------------------------------------------------------------------
+INSERT INTO drill_template (id, name, description, created_by, created_at, updated_at) VALUES
+    (1, '商业综合体火灾疏散标准演练', '发现火情 → 消控室核实 → 启动应急广播 → 各楼层引导疏散 → 清点上报 → 终止演练的标准指令链', '陈默', '2026-09-20 10:00:00', '2026-09-20 10:00:00');
+
+INSERT INTO drill_template_post (id, template_id, post_code, post_name, sort_no) VALUES
+    (1, 1, 'CTRL',  '消控室值班岗', 1),
+    (2, 1, 'PATROL','巡逻处置岗',   2),
+    (3, 1, 'GUIDE', '楼层引导岗',   3),
+    (4, 1, 'CMD',   '现场总指挥岗', 4);
+
+INSERT INTO drill_template_card
+    (id, template_id, seq_no, title, content, scene_hint, target_post_code, time_limit_seconds, prereq_seqs) VALUES
+    (1, 1, 1, '发现火情并上报', '一层餐饮区疑似起火，立即到现场确认并向消控室报告火情位置、燃烧物与火势',
+     '携带对讲机，就近取灭火器先行观察，注意自身站位避开烟气方向', 'PATROL', 30, NULL),
+    (2, 1, 2, '消控室核实火情', '接到巡逻岗上报后，调用一层监控与火灾报警主机核实，并通知现场总指挥',
+     '核对报警主机回路号，避免误报直接广播', 'CTRL', 25, '1'),
+    (3, 1, 3, '启动应急广播', '总指挥下令后，启动消防应急广播，按楼层依次播报疏散指令',
+     '先起火层、再相邻层，广播词使用标准话术', 'CTRL', 20, '2'),
+    (4, 1, 4, '组织一层人员疏散', '收到广播后，在一层安全出口与中庭位置引导顾客低姿撤离至集合点',
+     '提醒勿乘扶梯/电梯，照顾行动不便人员', 'GUIDE', 45, '3'),
+    (5, 1, 5, '清点人数并上报', '在集合点清点一层疏散人数，确认无被困人员后向总指挥报告',
+     '人数与值班表核对，缺员立即报告具体位置', 'GUIDE', 40, '4'),
+    (6, 1, 6, '宣布演练结束', '汇总各岗位情况，确认现场安全，宣布演练结束并组织讲评',
+     '讲评记录各节点响应耗时与超时项', 'CMD', 30, '5');
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================================
 -- 数据小结：
 --   building 5 / building_floor 18 / facility_point 38 / extinguisher 14
 --   inspection 12 / inspection_item 48 / maintenance_order 14
+--   drill_template 1（4 岗 6 卡）
 -- ============================================================================
